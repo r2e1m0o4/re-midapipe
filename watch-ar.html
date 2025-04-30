@@ -1,97 +1,140 @@
-<script>
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ساعت روی دست</title>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      overflow: hidden;
+    }
+    #video {
+      width: 100%;
+      height: 100vh;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    #watch {
+      position: absolute;
+      width: 150px;
+      height: 180px;
+      background-size: contain;
+      background-repeat: no-repeat;
+      pointer-events: none;
+      display: none;
+    }
+    #status {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      font-family: sans-serif;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="status">در حال راه‌اندازی...</div>
+  <video id="video" autoplay playsinline muted></video>
+  <div id="watch"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+  <script>
     const video = document.getElementById('video');
     const watch = document.getElementById('watch');
     const statusText = document.getElementById('status');
-    const watchImage = 'https://systino.com/uploads/5ea841cf7557411ba37fee4051840561.png';
-
+    
+    // تصویر جایگزین با لینک مطمئن
+    const watchImage = 'https://i.imgur.com/JqYeYnR.png'; 
     watch.style.backgroundImage = `url(${watchImage})`;
 
     async function setupCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "user" } }
+          video: { 
+            facingMode: "user",
+            width: 1280,
+            height: 720 
+          }
         });
         video.srcObject = stream;
-        await video.play();
+        await new Promise((resolve) => {
+          video.onloadedmetadata = () => {
+            video.play();
+            resolve();
+          };
+        });
         return true;
       } catch (err) {
-        console.error("Camera error:", err);
-        statusText.textContent = "خطا در دسترسی به دوربین";
+        statusText.textContent = "⚠️ خطا: دوربین فعال نشد!";
+        console.error("Camera Error:", err);
         return false;
       }
     }
 
-    async function startHandTracking() {
+    async function initHandTracking() {
       const hands = new Hands({
-        locateFile: (file) => `https://r2e1m0o4.github.io/re-midapipe/${file}`
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
 
-      // تنظیمات ساده‌تر اما موثر
       hands.setOptions({
         maxNumHands: 1,
-        modelComplexity: 0,  // مدل ساده‌تر برای عملکرد بهتر
+        modelComplexity: 1,
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5
       });
 
       hands.onResults((results) => {
         if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-          // نقطه مچ دست (نقطه 0 در landmarks)
-          const wrist = results.multiHandLandmarks[0][0];
+          const wrist = results.multiHandLandmarks[0][0]; // نقطه مچ
+          const x = (wrist.x * video.videoWidth) - (watch.offsetWidth / 2);
+          const y = (wrist.y * video.videoHeight) - (watch.offsetHeight / 2);
           
-          // تبدیل مختصات نرمال شده به پیکسل
-          // توجه: video.videoWidth و video.videoHeight ممکن است با اندازه نمایش متفاوت باشد
-          const videoWidth = video.videoWidth;
-          const videoHeight = video.videoHeight;
-          
-          // محاسبه موقعیت ساعت با در نظر گرفتن اندازه آن
-          const watchWidth = 150;
-          const watchHeight = 180;
-          const x = wrist.x * videoWidth - watchWidth/2;
-          const y = wrist.y * videoHeight - watchHeight/2;
-          
-          // تنظیم موقعیت ساعت
           watch.style.left = `${x}px`;
           watch.style.top = `${y}px`;
           watch.style.display = "block";
           
-          // برای دیباگ: نمایش مختصات در کنسول
-          console.log(`Wrist at: X=${x}, Y=${y}`);
+          // دیباگ موقعیت
+          console.log(`ساعت در موقعیت: X=${x}, Y=${y}`);
         } else {
           watch.style.display = "none";
-          console.log("No hand detected");
         }
       });
 
-      async function detectLoop() {
-        try {
-          // فقط اگر ویدیو آماده است پردازش شود
-          if (video.readyState >= video.HAVE_ENOUGH_DATA) {
-            await hands.send({ image: video });
-          }
-        } catch (e) {
-          console.error("Detection error:", e);
-        }
-        requestAnimationFrame(detectLoop);
-      }
-
-      detectLoop();
+      const camera = new Camera(video, {
+        onFrame: async () => {
+          await hands.send({ image: video });
+        },
+        width: 1280,
+        height: 720
+      });
+      camera.start();
     }
 
-    async function init() {
-      statusText.textContent = "در حال فعال‌سازی دوربین...";
-      const ok = await setupCamera();
-      if (!ok) return;
+    async function main() {
+      statusText.textContent = "🔵 در حال روشن کردن دوربین...";
+      const cameraReady = await setupCamera();
+      if (!cameraReady) return;
 
-      statusText.textContent = "در حال بارگذاری مدل...";
+      statusText.textContent = "🔵 در حال بارگذاری مدل دست...";
       try {
-        await startHandTracking();
-        statusText.textContent = "دستت رو جلوی دوربین بگیر!";
+        await initHandTracking();
+        statusText.textContent = "✅ آماده! دست خود را جلوی دوربین بگیرید";
       } catch (e) {
-        console.error("Tracking error:", e);
-        statusText.textContent = "خطا در بارگذاری مدل تشخیص دست";
+        statusText.textContent = "❌ خطا در بارگذاری مدل!";
+        console.error("Model Error:", e);
       }
     }
 
-    window.addEventListener("DOMContentLoaded", init);
-</script>
+    main();
+  </script>
+</body>
+</html>

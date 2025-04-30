@@ -5,130 +5,107 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ساعت مچی AR</title>
   <style>
-    body, html {
+    body {
       margin: 0;
-      padding: 0;
       overflow: hidden;
-      background: black;
+      background: #000;
     }
     #container {
       position: relative;
       width: 100vw;
       height: 100vh;
     }
-    video {
+    #video {
       width: 100%;
       height: 100%;
       object-fit: cover;
       transform: scaleX(-1);
     }
-#watch {
-  position: absolute;
-  width: 120px;
-  height: 150px;
-  background: url('https://raw.githubusercontent.com/r2e1m0o4/re-midapipe/main/watch.png') center/contain no-repeat;
-  display: none;
-}
+    #watch {
+      position: absolute;
+      width: 120px;
+      height: 150px;
+      background: url('https://raw.githubusercontent.com/r2e1m0o4/re-midapipe/main/watch.png') center/contain no-repeat;
+      background-size: contain;
+      display: none;
+      pointer-events: none;
+    }
     #status {
       position: absolute;
       top: 10px;
       left: 10px;
-      background: rgba(0,0,0,0.6);
       color: white;
+      background: rgba(0,0,0,0.7);
       padding: 10px;
-      border-radius: 8px;
       font-family: sans-serif;
-      z-index: 10;
+      z-index: 100;
     }
   </style>
 </head>
 <body>
   <div id="container">
+    <div id="status">در حال راه‌اندازی...</div>
     <video id="video" autoplay playsinline muted></video>
     <div id="watch"></div>
-    <div id="status">در حال بارگذاری...</div>
   </div>
 
-  <script type="module">
-    import { HandLandmarker, FilesetResolver } from './hands.js';
-
-    const statusText = document.getElementById('status');
+  <script>
     const video = document.getElementById('video');
     const watch = document.getElementById('watch');
+    const statusText = document.getElementById('status');
 
-    let handLandmarker;
-
-    async function initCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width: 640,
-          height: 480
-        },
-        audio: false
-      });
-      video.srcObject = stream;
-      return new Promise(resolve => {
-        video.onloadedmetadata = () => {
-          resolve();
-        };
-      });
-    }
-
-    async function initMediaPipe() {
-      const fileset = await FilesetResolver.forVisionTasks(
-        './' // مسیر نسبی به فایل‌های wasm و مدل‌ها
-      );
-
-      handLandmarker = await HandLandmarker.createFromOptions(fileset, {
-        baseOptions: {
-          modelAssetPath: './hand_landmark_lite.tflite',
-          delegate: 'GPU'
-        },
-        runningMode: 'VIDEO',
-        numHands: 1
-      });
-    }
-
-    async function main() {
-      await initCamera();
-      await initMediaPipe();
-
-      statusText.textContent = 'در حال شناسایی دست...';
-      video.play();
-
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      function detectHands() {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        const results = handLandmarker.detectForVideo(canvas, performance.now());
-
-        if (results.landmarks.length > 0) {
-          const wrist = results.landmarks[0][0]; // نقطه مچ دست
-          const x = wrist.x * window.innerWidth;
-          const y = wrist.y * window.innerHeight;
-
-          watch.style.left = `${x - 40}px`;
-          watch.style.top = `${y - 40}px`;
-          watch.style.display = 'block';
-
-          statusText.textContent = 'دست شناسایی شد';
-        } else {
-          watch.style.display = 'none';
-          statusText.textContent = 'در حال شناسایی دست...';
-        }
-
-        requestAnimationFrame(detectHands);
+    // مرحله ۱: راه‌اندازی دوربین
+    async function setupCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user", // برای دوربین جلو. اگر مچ دست رو با دوربین پشتی می‌خوای: "environment"
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+        });
+        video.srcObject = stream;
+        
+        // منتظر می‌مانیم تا ویدیو آماده شود
+        await new Promise((resolve) => {
+          video.onloadedmetadata = () => {
+            video.play();
+            resolve();
+          };
+        });
+        
+        statusText.textContent = "دوربین فعال شد!";
+        return true;
+      } catch (err) {
+        statusText.textContent = "خطا در دسترسی به دوربین";
+        console.error("Camera Error:", err);
+        return false;
       }
-
-      requestAnimationFrame(detectHands);
     }
 
-    main();
+    // مرحله ۲: شبیه‌سازی نمایش ساعت برای تست
+    function simulateWatchPlacement() {
+      const x = window.innerWidth / 2;
+      const y = window.innerHeight / 2 + 100; // کمی پایین‌تر از مرکز
+
+      watch.style.left = `${x - 60}px`;
+      watch.style.top = `${y - 75}px`;
+      watch.style.display = "block";
+
+      statusText.textContent = "ساعت در حال نمایش آزمایشی است (بدون تشخیص دست)";
+    }
+
+    // مرحله ۳: شروع برنامه
+    async function init() {
+      statusText.textContent = "در حال راه‌اندازی دوربین...";
+      
+      if (await setupCamera()) {
+        simulateWatchPlacement();
+        // بعداً MediaPipe اینجا اضافه می‌شه
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
 </html>

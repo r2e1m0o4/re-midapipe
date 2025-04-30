@@ -1,173 +1,122 @@
 <!DOCTYPE html>
 <html lang="fa">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ساعت AR - شناسایی دست</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ساعت AR روی مچ دست</title>
   <style>
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
+      background: #000;
       text-align: center;
-      background: #f5f5f5;
-    }
-    #container {
-      position: relative;
-      width: 100%;
-      height: 100vh;
-      max-width: 800px;
-      margin: 20px auto;
-      border-radius: 10px;
       overflow: hidden;
-      background-color: #000;
     }
     #video {
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100vh;
       object-fit: cover;
+      transform: scaleX(-1);
     }
     #watch {
       position: absolute;
-      pointer-events: none;
       width: 150px;
       height: 180px;
-      background-image: url('https://systino.com/uploads/5ea841cf7557411ba37fee4051840561.png');
       background-size: contain;
       background-repeat: no-repeat;
+      pointer-events: none;
       display: none;
-      z-index: 5;
+      z-index: 10;
     }
     #status {
       position: absolute;
       top: 10px;
-      left: 0;
-      right: 0;
+      width: 100%;
       color: white;
-      background: rgba(0,0,0,0.7);
-      padding: 10px;
-      z-index: 10;
+      background: rgba(0,0,0,0.5);
+      padding: 8px;
+      font-family: sans-serif;
+      z-index: 20;
     }
   </style>
 </head>
 <body>
-  <div id="container">
-    <div id="status">در حال راه‌اندازی...</div>
-    <video id="video" autoplay playsinline muted></video>
-    <div id="watch"></div>
-  </div>
+  <div id="status">در حال راه‌اندازی...</div>
+  <video id="video" autoplay playsinline muted></video>
+  <div id="watch"></div>
 
-  <!-- استفاده از CDN برای MediaPipe -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-
+  <!-- فایل‌های MediaPipe از GitHub شما -->
+  <script src="https://r2e1m0o4.github.io/re-midapipe/hands.js"></script>
+  <script src="https://r2e1m0o4.github.io/re-midapipe/hands_solution_simd_wasm_bin.js"></script>
   <script>
     const video = document.getElementById('video');
-    const statusEl = document.getElementById('status');
-    const watchEl = document.getElementById('watch');
-    
-    // تصویر ساعت
-    const watchImg = new Image();
-    watchImg.src = 'https://systino.com/uploads/5ea841cf7557411ba37fee4051840561.png';
+    const watch = document.getElementById('watch');
+    const statusText = document.getElementById('status');
+    const watchImage = 'https://systino.com/uploads/5ea841cf7557411ba37fee4051840561.png';
 
-    // تنظیم اندازه ساعت
-    function setupWatch() {
-      watchEl.style.width = '150px';
-      watchEl.style.height = '180px';
-      watchEl.style.backgroundImage = `url(${watchImg.src})`;
-    }
+    watch.style.backgroundImage = `url(${watchImage})`;
 
-    // راه‌اندازی دوربین
     async function setupCamera() {
       try {
-        statusEl.textContent = 'در حال اتصال به دوربین...';
-        const constraints = {
-          video: { facingMode: 'user' }
-        };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = stream;
-
-        await new Promise((resolve) => {
-          video.onloadedmetadata = () => {
-            video.play().then(resolve);
-          };
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "user" } }
         });
-
+        video.srcObject = stream;
+        await video.play();
         return true;
-      } catch (error) {
-        console.error('Camera setup error:', error);
-        statusEl.textContent = `خطا در دوربین: ${error.message}`;
+      } catch (err) {
+        console.error("Camera error:", err);
+        statusText.textContent = "خطا در دسترسی به دوربین";
         return false;
       }
     }
 
-    // راه‌اندازی مدل تشخیص دست
-    async function setupHands() {
-      try {
-        statusEl.textContent = 'در حال بارگذاری مدل تشخیص دست...';
-        const hands = new Hands({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
+    async function startHandTracking() {
+      const hands = new Hands({
+        locateFile: (file) => `https://r2e1m0o4.github.io/re-midapipe/${file}`
+      });
 
-        await hands.setOptions({
-          maxNumHands: 1,
-          modelComplexity: 0,
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5
-        });
-
-        return hands;
-      } catch (error) {
-        console.error('Hands setup error:', error);
-        statusEl.textContent = 'خطا در بارگذاری مدل تشخیص دست';
-        throw error;
-      }
-    }
-
-    // راه‌اندازی اصلی
-    async function main() {
-      // 1. تنظیم ساعت
-      setupWatch();
-
-      // 2. راه‌اندازی دوربین
-      const cameraReady = await setupCamera();
-      if (!cameraReady) return;
-
-      // 3. راه‌اندازی مدل
-      const hands = await setupHands();
-
-      // 4. شروع پردازش
-      statusEl.textContent = 'آماده به کار! دست خود را مقابل دوربین بگیرید';
-
-      const camera = new Camera(video, {
-        onFrame: async () => {
-          await hands.send({ image: video });
-        },
-        width: video.videoWidth,
-        height: video.videoHeight
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 0,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
       });
 
       hands.onResults((results) => {
-        if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-          watchEl.style.display = 'none';
-          return;
+        if (
+          results.multiHandLandmarks &&
+          results.multiHandLandmarks.length > 0
+        ) {
+          const wrist = results.multiHandLandmarks[0][0]; // نقطه مچ
+          const x = (1 - wrist.x) * video.videoWidth;
+          const y = wrist.y * video.videoHeight;
+          watch.style.left = `${x - 75}px`;
+          watch.style.top = `${y - 90}px`;
+          watch.style.display = "block";
+        } else {
+          watch.style.display = "none";
         }
-
-        const wrist = results.multiHandLandmarks[0][0];
-        const x = (1 - wrist.x) * video.videoWidth;
-        const y = wrist.y * video.videoHeight;
-
-        watchEl.style.left = `${x - 75}px`;
-        watchEl.style.top = `${y - 90}px`;
-        watchEl.style.display = 'block';
       });
 
-      await camera.start();
+      async function detectLoop() {
+        await hands.send({ image: video });
+        requestAnimationFrame(detectLoop);
+      }
+
+      detectLoop();
     }
 
-    // شروع برنامه
-    document.addEventListener('DOMContentLoaded', main);
+    async function init() {
+      statusText.textContent = "در حال فعال‌سازی دوربین...";
+      const ok = await setupCamera();
+      if (!ok) return;
+
+      statusText.textContent = "در حال بارگذاری مدل...";
+      await startHandTracking();
+      statusText.textContent = "دستت رو جلوی دوربین بگیر!";
+    }
+
+    window.addEventListener("DOMContentLoaded", init);
   </script>
 </body>
 </html>

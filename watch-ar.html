@@ -1,105 +1,128 @@
 <!DOCTYPE html>
 <html lang="fa">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ساعت مچی AR</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ساعت واقعیت افزوده</title>
   <style>
-    body, html {
+    html, body {
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: #000;
-      font-family: sans-serif;
+      background-color: #000;
     }
     #container {
       position: relative;
       width: 100vw;
       height: 100vh;
     }
-    #video {
+    video {
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(-1);
+      transform: scaleX(-1); /* Mirror for selfie mode */
     }
     #watch {
       position: absolute;
       width: 100px;
       height: auto;
-      display: none;
       transform: translate(-50%, -50%);
       pointer-events: none;
+      display: none;
     }
     #status {
       position: absolute;
       top: 10px;
       left: 10px;
       color: white;
-      background: rgba(0,0,0,0.6);
-      padding: 8px;
+      background-color: rgba(0,0,0,0.6);
+      padding: 10px;
       border-radius: 5px;
       z-index: 10;
+      font-family: sans-serif;
     }
   </style>
 </head>
 <body>
   <div id="container">
+    <div id="status">در حال راه‌اندازی...</div>
     <video id="video" autoplay playsinline muted></video>
-    <img id="watch" src="https://raw.githubusercontent.com/r2e1m0o4/re-midapipe/main/watch.png" alt="Watch">
-    <div id="status">در حال بارگذاری مدل...</div>
+    <img id="watch" src="https://raw.githubusercontent.com/r2e1m0o4/re-midapipe/main/watch.png" alt="watch">
   </div>
 
+  <!-- اسکریپت‌ها -->
   <script type="module">
-    import { FilesetResolver, HandLandmarker } from './hands.js';
+    import { HandLandmarker, FilesetResolver } from "./hands.js";
 
-    const video = document.getElementById('video');
-    const watch = document.getElementById('watch');
-    const statusText = document.getElementById('status');
+    const video = document.getElementById("video");
+    const watch = document.getElementById("watch");
+    const statusText = document.getElementById("status");
 
     let handLandmarker;
-    let lastVideoTime = -1;
+    let running = false;
 
-    async function init() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" }, // دوربین پشت
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        }
+      });
       video.srcObject = stream;
+      return new Promise(resolve => {
+        video.onloadedmetadata = () => {
+          video.play();
+          resolve();
+        };
+      });
+    }
 
-      await new Promise(resolve => video.onloadedmetadata = resolve);
-
-      const fileset = await FilesetResolver.forVisionTasks('./');
+    async function loadModel() {
+      const fileset = await FilesetResolver.forVisionTasks("./");
       handLandmarker = await HandLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: './hand_landmark_full.tflite' },
-        runningMode: 'VIDEO',
+        baseOptions: {
+          modelAssetPath: "./hand_landmark_full.tflite",
+          delegate: "CPU"
+        },
+        runningMode: "VIDEO",
         numHands: 1
       });
+    }
 
-      statusText.textContent = 'در حال شناسایی دست...';
-      requestAnimationFrame(detect);
+    function updateWatchPosition(landmarks) {
+      if (!landmarks || landmarks.length === 0) {
+        watch.style.display = "none";
+        return;
+      }
+      const wrist = landmarks[0][0]; // نقطه‌ی مچ دست
+      const x = wrist.x * window.innerWidth;
+      const y = wrist.y * window.innerHeight;
+      watch.style.left = `${x}px`;
+      watch.style.top = `${y}px`;
+      watch.style.display = "block";
     }
 
     async function detect() {
-      if (!video.paused && !video.ended && video.readyState === 4) {
-        const now = performance.now();
-        if (video.currentTime !== lastVideoTime) {
-          lastVideoTime = video.currentTime;
-          const result = handLandmarker.detectForVideo(video, now);
+      if (!running) return;
 
-          if (result.handednesses.length > 0) {
-            const wrist = result.landmarks[0][0];
-            const x = wrist.x * video.offsetWidth;
-            const y = wrist.y * video.offsetHeight;
-
-            watch.style.left = `${x}px`;
-            watch.style.top = `${y}px`;
-            watch.style.display = 'block';
-            statusText.textContent = 'دست پیدا شد!';
-          } else {
-            watch.style.display = 'none';
-            statusText.textContent = 'در حال شناسایی دست...';
-          }
-        }
-      }
+      const results = handLandmarker.detectForVideo(video, performance.now());
+      updateWatchPosition(results.landmarks);
       requestAnimationFrame(detect);
+    }
+
+    async function init() {
+      try {
+        await setupCamera();
+        statusText.innerText = "در حال بارگذاری مدل...";
+        await loadModel();
+        statusText.innerText = "مدل بارگذاری شد. در حال تشخیص دست...";
+        running = true;
+        detect();
+      } catch (e) {
+        console.error(e);
+        statusText.innerText = "خطا در راه‌اندازی!";
+      }
     }
 
     init();

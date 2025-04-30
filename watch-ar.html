@@ -1,29 +1,19 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ساعت روی دست</title>
+  <title>ساعت AR</title>
   <style>
-    body {
-      margin: 0;
-      background: #000;
-      overflow: hidden;
-    }
-    #video {
-      width: 100%;
-      height: 100vh;
-      object-fit: cover;
-      transform: scaleX(-1);
-    }
+    body { margin: 0; overflow: hidden; background: #000; }
+    #video { width: 100%; height: 100vh; object-fit: cover; transform: scaleX(-1); }
     #watch {
       position: absolute;
       width: 150px;
       height: 180px;
-      background-size: contain;
-      background-repeat: no-repeat;
-      pointer-events: none;
+      background: url('https://i.imgur.com/JqYeYnR.png') center/contain no-repeat;
       display: none;
+      pointer-events: none;
     }
     #status {
       position: absolute;
@@ -51,18 +41,14 @@
     const video = document.getElementById('video');
     const watch = document.getElementById('watch');
     const statusText = document.getElementById('status');
-    
-    // تصویر جایگزین با لینک مطمئن
-    const watchImage = 'https://i.imgur.com/JqYeYnR.png'; 
-    watch.style.backgroundImage = `url(${watchImage})`;
 
     async function setupCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { 
             facingMode: "user",
-            width: 1280,
-            height: 720 
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
           }
         });
         video.srcObject = stream;
@@ -74,49 +60,10 @@
         });
         return true;
       } catch (err) {
-        statusText.textContent = "⚠️ خطا: دوربین فعال نشد!";
+        statusText.textContent = "⚠️ دوربین فعال نشد!";
         console.error("Camera Error:", err);
         return false;
       }
-    }
-
-    async function initHandTracking() {
-      const hands = new Hands({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-      });
-
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-      });
-
-      hands.onResults((results) => {
-        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-          const wrist = results.multiHandLandmarks[0][0]; // نقطه مچ
-          const x = (wrist.x * video.videoWidth) - (watch.offsetWidth / 2);
-          const y = (wrist.y * video.videoHeight) - (watch.offsetHeight / 2);
-          
-          watch.style.left = `${x}px`;
-          watch.style.top = `${y}px`;
-          watch.style.display = "block";
-          
-          // دیباگ موقعیت
-          console.log(`ساعت در موقعیت: X=${x}, Y=${y}`);
-        } else {
-          watch.style.display = "none";
-        }
-      });
-
-      const camera = new Camera(video, {
-        onFrame: async () => {
-          await hands.send({ image: video });
-        },
-        width: 1280,
-        height: 720
-      });
-      camera.start();
     }
 
     async function main() {
@@ -124,12 +71,45 @@
       const cameraReady = await setupCamera();
       if (!cameraReady) return;
 
-      statusText.textContent = "🔵 در حال بارگذاری مدل دست...";
+      statusText.textContent = "🔵 در حال بارگذاری مدل...";
       try {
-        await initHandTracking();
+        const hands = new Hands({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+
+        hands.onResults((results) => {
+          if (results.multiHandLandmarks?.length > 0) {
+            const wrist = results.multiHandLandmarks[0][0];
+            const x = (wrist.x * video.videoWidth) - 75;
+            const y = (wrist.y * video.videoHeight) - 90;
+            
+            watch.style.left = `${x}px`;
+            watch.style.top = `${y}px`;
+            watch.style.display = "block";
+          } else {
+            watch.style.display = "none";
+          }
+        });
+
+        const camera = new Camera(video, {
+          onFrame: async () => {
+            await hands.send({ image: video });
+          },
+          width: 1280,
+          height: 720
+        });
+        camera.start();
+        
         statusText.textContent = "✅ آماده! دست خود را جلوی دوربین بگیرید";
       } catch (e) {
-        statusText.textContent = "❌ خطا در بارگذاری مدل!";
+        statusText.textContent = "❌ خطا در بارگذاری مدل";
         console.error("Model Error:", e);
       }
     }

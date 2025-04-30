@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>پیش‌نمایش ساعت روی مچ دست</title>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      overflow: hidden;
+    }
+    #container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    video {
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    #watch {
+      position: absolute;
+      width: 120px;
+      height: 140px;
+      background-image: url("https://systino.com/uploads/5ea841cf7557411ba37fee4051840561.png");
+      background-size: contain;
+      background-repeat: no-repeat;
+      display: none;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #status {
+      position: absolute;
+      top: 10px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: white;
+      font-family: sans-serif;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 5px;
+      z-index: 20;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="status">در حال بارگذاری...</div>
+    <video id="video" autoplay playsinline muted></video>
+    <div id="watch"></div>
+  </div>
+
+  <script src="./hands.js"></script>
+  <script src="./camera_utils.js"></script>
+  <script>
+    const video = document.getElementById("video");
+    const watch = document.getElementById("watch");
+    const statusEl = document.getElementById("status");
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: 640, height: 480 }
+        });
+        video.srcObject = stream;
+        return new Promise((resolve) => {
+          video.onloadedmetadata = () => {
+            resolve();
+          };
+        });
+      } catch (err) {
+        statusEl.innerText = "دسترسی به دوربین ممکن نیست.";
+        console.error(err);
+      }
+    }
+
+    async function main() {
+      await startCamera();
+      statusEl.innerText = "در حال شناسایی دست...";
+
+      const hands = new Hands({
+        locateFile: (file) => `./${file}`,
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.5
+      });
+
+      hands.onResults((results) => {
+        if (
+          results.multiHandLandmarks &&
+          results.multiHandLandmarks.length > 0
+        ) {
+          const wrist = results.multiHandLandmarks[0][0]; // نقطه مچ
+          const x = (1 - wrist.x) * video.videoWidth;
+          const y = wrist.y * video.videoHeight;
+
+          watch.style.left = `${x - 60}px`;
+          watch.style.top = `${y - 70}px`;
+          watch.style.display = "block";
+          statusEl.innerText = "دست شناسایی شد ✅";
+        } else {
+          watch.style.display = "none";
+          statusEl.innerText = "دستی شناسایی نشد ❌";
+        }
+      });
+
+      const camera = new Camera(video, {
+        onFrame: async () => {
+          await hands.send({ image: video });
+        },
+        width: 640,
+        height: 480,
+      });
+
+      camera.start();
+    }
+
+    main();
+  </script>
+</body>
+</html>
